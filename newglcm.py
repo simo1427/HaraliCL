@@ -27,7 +27,7 @@ platform_devices = platformselect(0).get_devices()
 context = cl.Context(devices=platform_devices)
 src = open("glcm_compute.cl").read()
 prgs_src = cl.Program(context, src)
-prgs = prgs_src.build()
+prgs = prgs_src.build("-DSYMMETRIC")
 print(platform_devices)
 
 # Define parameters for the GLCM computation
