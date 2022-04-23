@@ -161,32 +161,17 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 // Mean
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
                     int addr = calculate_address((ncols), dx, dy, pairaddr0);
-//#ifdef SYMMETRIC
-//                    meani += (pair[addr].weight / (counts)) *
-//                                     (pair[addr].ref + pair[addr].val); // symmetrical pairs!
-//#else
                     meani += (pair[addr].weight / (counts)) * (pair[addr].ref);
                     meanj += (pair[addr].weight / (counts)) * (pair[addr].val);
-//#endif
                 }
                 // Variance
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
                     int addr = calculate_address((ncols), dx, dy, pairaddr0);
-//#ifdef SYMMETRIC
-//                    vari += (pair[addr].weight / (counts)) *
-//                                    (pow((pair[addr].ref - meani), 2) +
-//                                     pow(pair[addr].val - meanj, 2));
-//#else
                     vari += (pair[addr].weight / (counts)) *
                                     (pow((pair[addr].ref - meani), 2));
                     varj +=
                             (pair[addr].weight / (counts)) * pow((pair[addr].val - meanj), 2);
-//#endif
                 }
-//#ifdef SYMMETRIC
-//                meanj = meani;
-//                varj = vari;
-//#endif
                 // Correlation 6
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
                     int addr = calculate_address((ncols), dx, dy, pairaddr0);
