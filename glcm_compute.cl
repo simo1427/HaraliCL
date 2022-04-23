@@ -1,19 +1,23 @@
+#ifndef WINDOW_SIZE
+#error Window size not defined. Pass it as a command-line argument via -DWINDOW_SIZE=.
+#endif
+
 typedef struct GrayPair {
     uchar ref, val;
     float weight;
 } graypair_t;
 
-int calculate_address(int _ncols, int dx, int dy, int windowsz, uint cnt) {
-    int numaddrows = cnt / windowsz, mod = cnt % windowsz;
-    return _ncols * (get_group_id(0) * (windowsz) + numaddrows) +
-         (get_group_id(1)) * (windowsz) + mod;
+int calculate_address(int _ncols, int dx, int dy, uint cnt) {
+    int numaddrows = cnt / WINDOW_SIZE, mod = cnt % WINDOW_SIZE;
+    return _ncols * (get_group_id(0) * (WINDOW_SIZE) + numaddrows) +
+         (get_group_id(1)) * (WINDOW_SIZE) + mod;
 }
 
 int searchpair(__global graypair_t *pair, uchar ref, uchar val, int _ncols,
-               int dx, int dy, int windowsz, uint cnt) {
+               int dx, int dy, uint cnt) {
     int k;
     for (k = 0; k < cnt; k++) {
-    int addr = calculate_address(_ncols, dx, dy, windowsz, k);
+    int addr = calculate_address(_ncols, dx, dy, k);
     if (pair[addr].ref == ref && pair[addr].val == val)
       return addr;
     }
@@ -22,10 +26,10 @@ int searchpair(__global graypair_t *pair, uchar ref, uchar val, int _ncols,
 
 
 void clearpairs(__global graypair_t *pair, int _ncols, int dx, int dy,
-                int windowsz, uint cnt) {
+                 uint cnt) {
     int k;
     for (k = 0; k < cnt; k++) {
-        int addr = calculate_address(_ncols, dx, dy, windowsz, k);
+        int addr = calculate_address(_ncols, dx, dy, k);
         pair[addr].ref = 0;
         pair[addr].val = 0;
         pair[addr].weight = 0.0f;
@@ -36,22 +40,22 @@ void clearpairs(__global graypair_t *pair, int _ncols, int dx, int dy,
 
 __kernel void glcmgen(__global uchar *img, __global float *res,
                                 __global graypair_t *pair, int dx, int dy,
-                                int windowsz, int nrows, int ncols) {
+                                int nrows, int ncols) {
     int i = get_global_id(0), j = get_global_id(1);
-    int counts = (windowsz - dx) * (windowsz - dy);
+    int counts = (WINDOW_SIZE - dx) * (WINDOW_SIZE - dy);
 #ifdef SYMMETRIC
     counts *= 2;
 #endif
-    int hws = windowsz / 2;
+    int hws = WINDOW_SIZE / 2;
     int xstart = hws, xend = ncols - hws;
     int ystart = hws, yend = nrows - hws;
     float sum_private = 0.0f;
-    int stridex = (xend - xstart) / windowsz + 1,
-            stridey = (yend - ystart) / windowsz + 1;
-    int yrangestart = get_group_id(0) * windowsz,
-            yrangeend = (get_group_id(0) + 1) * windowsz;
-    int xrangestart = get_group_id(1) * windowsz,
-            xrangeend = (get_group_id(1) + 1) * windowsz;
+    int stridex = (xend - xstart) / WINDOW_SIZE + 1,
+            stridey = (yend - ystart) / WINDOW_SIZE + 1;
+    int yrangestart = get_group_id(0) * WINDOW_SIZE,
+            yrangeend = (get_group_id(0) + 1) * WINDOW_SIZE;
+    int xrangestart = get_group_id(1) * WINDOW_SIZE,
+            xrangeend = (get_group_id(1) + 1) * WINDOW_SIZE;
     __local uint cnt;
     __local float meani, meanj, vari, varj;
     float increment;
@@ -78,14 +82,14 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                         int val = img[(i + imaddr0 + dy) * ncols + (imaddr1 + dx + j)];
 #ifdef SYMMETRIC
                         int tmp = searchpair(pair, min(ref, val), max(ref, val), (ncols),
-                                                                 dx, dy, windowsz, cnt);
+                                                                 dx, dy, cnt);
 #else
-                        int tmp = searchpair(pair, ref, val, (ncols), dx, dy, windowsz, cnt);
+                        int tmp = searchpair(pair, ref, val, (ncols), dx, dy, cnt);
 #endif
                         if (tmp == -1) {
-                            pair[calculate_address((ncols), dx, dy, windowsz, cnt)].ref = ref;
-                            pair[calculate_address((ncols), dx, dy, windowsz, cnt)].val = val;
-                            pair[calculate_address((ncols), dx, dy, windowsz, cnt)].weight = increment;
+                            pair[calculate_address((ncols), dx, dy, cnt)].ref = ref;
+                            pair[calculate_address((ncols), dx, dy, cnt)].val = val;
+                            pair[calculate_address((ncols), dx, dy, cnt)].weight = increment;
                             cnt++;
                         } else {
                             pair[tmp].weight += increment;
@@ -94,7 +98,7 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 }
                 // dissimilarity 0
                 for (int pairaddr0 = 0; pairaddr0 < cnt + 1; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     sum_private += (pair[addr].weight / (counts)) *
                                                  abs(pair[addr].ref - pair[addr].val);
                 }
@@ -103,7 +107,7 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 sum_private = 0.0f;
                 // contrast 1
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     sum_private += (pair[addr].weight / (counts)) *
                                                  (pair[addr].ref - pair[addr].val) *
                                                  (pair[addr].ref - pair[addr].val);
@@ -113,7 +117,7 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 sum_private = 0.0f;
                 // homogeneity 2
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     float tmpres = (pair[addr].weight / (counts)) /
                                                  (1 + (pair[addr].ref - pair[addr].val) *
                                                                     (pair[addr].ref - pair[addr].val));
@@ -126,7 +130,7 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 sum_private = 0.0f;
                 // ASM 3
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     sum_private +=
                             (pair[addr].weight / (counts)) * (pair[addr].weight / counts);
                 }
@@ -135,7 +139,7 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 sum_private = 0.0f;
                 // energy 4
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     sum_private +=
                             (pair[addr].weight / (counts)) * (pair[addr].weight / counts);
                 }
@@ -144,7 +148,7 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 sum_private = 0.0f;
                 // entropy 5
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     float tmpres = -(pair[addr].weight / (counts)) *
                                                  log((pair[addr].weight / counts));
                     if (isnan(tmpres))
@@ -156,36 +160,36 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 sum_private = 0.0f;
                 // Mean
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
-#ifdef SYMMETRIC
-                    meani += (pair[addr].weight / (4 * counts)) *
-                                     (pair[addr].ref + pair[addr].val); // symmetrical pairs!
-#else
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
+//#ifdef SYMMETRIC
+//                    meani += (pair[addr].weight / (counts)) *
+//                                     (pair[addr].ref + pair[addr].val); // symmetrical pairs!
+//#else
                     meani += (pair[addr].weight / (counts)) * (pair[addr].ref);
                     meanj += (pair[addr].weight / (counts)) * (pair[addr].val);
-#endif
+//#endif
                 }
                 // Variance
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
-#ifdef SYMMETRIC
-                    vari += (pair[addr].weight / (4 * counts)) *
-                                    (pow((pair[addr].ref - meani), 2) +
-                                     pow(pair[addr].val - meanj, 2));
-#else
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
+//#ifdef SYMMETRIC
+//                    vari += (pair[addr].weight / (counts)) *
+//                                    (pow((pair[addr].ref - meani), 2) +
+//                                     pow(pair[addr].val - meanj, 2));
+//#else
                     vari += (pair[addr].weight / (counts)) *
                                     (pow((pair[addr].ref - meani), 2));
                     varj +=
                             (pair[addr].weight / (counts)) * pow((pair[addr].val - meanj), 2);
-#endif
+//#endif
                 }
-#ifdef SYMMETRIC
-                meanj = meani;
-                varj = vari;
-#endif
+//#ifdef SYMMETRIC
+//                meanj = meani;
+//                varj = vari;
+//#endif
                 // Correlation 6
                 for (int pairaddr0 = 0; pairaddr0 < cnt; pairaddr0++) {
-                    int addr = calculate_address((ncols), dx, dy, windowsz, pairaddr0);
+                    int addr = calculate_address((ncols), dx, dy, pairaddr0);
                     sum_private +=
                             (pair[addr].weight / (counts)) *
                             (((pair[addr].ref - meani) * (pair[addr].val - meanj)) /
@@ -198,7 +202,6 @@ __kernel void glcmgen(__global uchar *img, __global float *res,
                 vari = 0;
                 varj = 0;
                 sum_private = 0.0f;
-                clearpairs(pair, (ncols), dx, dy, windowsz, cnt);
                 cnt = 0;
             }
         }

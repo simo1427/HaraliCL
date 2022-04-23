@@ -22,19 +22,19 @@ def platformselect(index):
     """
     return [platform for platform in cl.get_platforms()][index]
 
-# Get the devices from platform 0 (usually computers have only 1 platform, hence the index 0)
-platform_devices = platformselect(0).get_devices()
-context = cl.Context(devices=platform_devices)
-src = open("glcm_compute.cl").read()
-prgs_src = cl.Program(context, src)
-prgs = prgs_src.build("-DSYMMETRIC")
-print(platform_devices)
-
 # Define parameters for the GLCM computation
 windowsz = 13
 hws = windowsz // 2
 dx = -1
 dy = 3
+
+# Get the devices from platform 0 (usually computers have only 1 platform, hence the index 0)
+platform_devices = platformselect(0).get_devices()
+context = cl.Context(devices=platform_devices)
+src = open("glcm_compute.cl", "r").read()
+prgs_src = cl.Program(context, src)
+prgs = prgs_src.build(["-DSYMMETRIC", f"-DWINDOW_SIZE={windowsz}"])
+print(platform_devices)
 
 # Open the image
 img = img_as_ubyte(rgb2gray(si.imread("./ischdown20x.png")))
@@ -63,7 +63,7 @@ for (arr, buff) in inp:
     cl.enqueue_copy(queue, src=arr, dest=buff)
 
 # Kernel arguments
-krn_args = [img_buff, res_buff, pair_buff, np.int32(dx), np.int32(dy), np.int32(windowsz), np.int32(img.shape[0]),
+krn_args = [img_buff, res_buff, pair_buff, np.int32(dx), np.int32(dy), np.int32(img.shape[0]),
             np.int32(img.shape[1])]
 print((math.ceil(img.shape[0] / windowsz), math.ceil(img.shape[1] / windowsz)))
 
